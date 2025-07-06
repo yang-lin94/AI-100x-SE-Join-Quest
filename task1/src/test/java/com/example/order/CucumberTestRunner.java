@@ -9,7 +9,7 @@ import static io.cucumber.junit.platform.engine.Constants.PLUGIN_PROPERTY_NAME;
 
 @Suite
 @IncludeEngines("cucumber")
-@SelectClasspathResource("order.feature")
+@SelectClasspathResource(".")
 @ConfigurationParameter(key = PLUGIN_PROPERTY_NAME, value = "pretty,html:target/cucumber-reports.html")
 @ConfigurationParameter(key = "cucumber.filter.tags", value = "not @ignore")
 public class CucumberTestRunner {

@@ -50,19 +50,26 @@ public class OrderStepDefinitions {
         List<Map<String, String>> rows = dataTable.asMaps(String.class, String.class);
         Map<String, String> expectedSummary = rows.get(0);
         
-        if (expectedSummary.containsKey("totalAmount")) {
-            double expectedTotal = Double.parseDouble(expectedSummary.get("totalAmount"));
-            assertThat(order.getTotalAmount()).isEqualTo(expectedTotal);
-        }
-        
-        if (expectedSummary.containsKey("originalAmount")) {
-            double expectedOriginal = Double.parseDouble(expectedSummary.get("originalAmount"));
-            assertThat(order.getOriginalAmount()).isEqualTo(expectedOriginal);
-        }
-        
-        if (expectedSummary.containsKey("discount")) {
-            double expectedDiscount = Double.parseDouble(expectedSummary.get("discount"));
-            assertThat(order.getDiscount()).isEqualTo(expectedDiscount);
+        // Check if this is a double11 format (has quantity column)
+        if (expectedSummary.containsKey("quantity")) {
+            // Double 11 format validation
+            validateDouble11OrderSummary(rows);
+        } else {
+            // Original format validation
+            if (expectedSummary.containsKey("totalAmount")) {
+                double expectedTotal = Double.parseDouble(expectedSummary.get("totalAmount"));
+                assertThat(order.getTotalAmount()).isEqualTo(expectedTotal);
+            }
+            
+            if (expectedSummary.containsKey("originalAmount")) {
+                double expectedOriginal = Double.parseDouble(expectedSummary.get("originalAmount"));
+                assertThat(order.getOriginalAmount()).isEqualTo(expectedOriginal);
+            }
+            
+            if (expectedSummary.containsKey("discount")) {
+                double expectedDiscount = Double.parseDouble(expectedSummary.get("discount"));
+                assertThat(order.getDiscount()).isEqualTo(expectedDiscount);
+            }
         }
     }
     
@@ -107,5 +114,52 @@ public class OrderStepDefinitions {
             orderService.clearAllPromotions();
         }
         orderService.configureBuyOneGetOneForCosmetics();
+    }
+    
+    @Given("the Double {int} promotion is active with {int}% discount for every {int} pieces of same product")
+    public void theDoublePromotionIsActiveWithDiscountForEveryPiecesOfSameProduct(Integer day, Integer discountPercentage, Integer minQuantity) {
+        // Clear all promotions first
+        orderService.clearAllPromotions();
+        // Configure Double 11 promotion
+        orderService.configureDouble11Promotion(discountPercentage, minQuantity);
+    }
+    
+    private void validateDouble11OrderSummary(List<Map<String, String>> rows) {
+        // Get the first order item (assuming single product in test)
+        OrderItem item = order.getItems().get(0);
+        
+        // Expected format:
+        // Row 1: discounted quantity (10), unitPrice (100), discount (200), subtotal (800)
+        // Row 2: remaining quantity (2), unitPrice (100), discount (0), subtotal (200)
+        
+        if (rows.size() >= 2) {
+            // Validate discounted portion
+            Map<String, String> discountedRow = rows.get(0);
+            int expectedDiscountedQuantity = Integer.parseInt(discountedRow.get("quantity"));
+            double expectedUnitPrice = Double.parseDouble(discountedRow.get("unitPrice"));
+            double expectedDiscount = Double.parseDouble(discountedRow.get("discount"));
+            double expectedDiscountedSubtotal = Double.parseDouble(discountedRow.get("subtotal"));
+            
+            assertThat(item.getDouble11DiscountedQuantity()).isEqualTo(expectedDiscountedQuantity);
+            assertThat(item.getProduct().getUnitPrice()).isEqualTo(expectedUnitPrice);
+            assertThat(item.getDouble11Discount()).isEqualTo(expectedDiscount);
+            
+            // Calculate discounted subtotal: (quantity * unitPrice) - discount
+            double actualDiscountedSubtotal = (expectedDiscountedQuantity * expectedUnitPrice) - expectedDiscount;
+            assertThat(actualDiscountedSubtotal).isEqualTo(expectedDiscountedSubtotal);
+            
+            // Validate remaining portion
+            Map<String, String> remainingRow = rows.get(1);
+            int expectedRemainingQuantity = Integer.parseInt(remainingRow.get("quantity"));
+            double expectedRemainingDiscount = Double.parseDouble(remainingRow.get("discount"));
+            double expectedRemainingSubtotal = Double.parseDouble(remainingRow.get("subtotal"));
+            
+            assertThat(item.getDouble11RemainingQuantity()).isEqualTo(expectedRemainingQuantity);
+            assertThat(expectedRemainingDiscount).isEqualTo(0.0); // No discount for remaining items
+            
+            // Calculate remaining subtotal: quantity * unitPrice
+            double actualRemainingSubtotal = expectedRemainingQuantity * expectedUnitPrice;
+            assertThat(actualRemainingSubtotal).isEqualTo(expectedRemainingSubtotal);
+        }
     }
 }
